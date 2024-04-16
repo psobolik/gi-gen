@@ -136,10 +136,12 @@ impl App {
         self.available_pane.set_focus(true);
         self.selected_pane.set_focus(false);
 
-        self.task_bar.push_task(Self::HELP_KEY_EVENT, "F1 Help");
-        self.task_bar.push_task(Self::ABOUT_KEY_EVENT, "^A About");
-        self.task_bar.push_task(Self::SAVE_KEY_EVENT, "^S Save");
-        self.task_bar.push_task(Self::QUIT_KEY_EVENT, "^Q Quit");
+        self.task_bar
+            .style(styles::TASK_BAR_STYLE)
+            .add_task(Self::HELP_KEY_EVENT, "F1 Help")
+            .add_task(Self::ABOUT_KEY_EVENT, "^A About")
+            .add_task(Self::SAVE_KEY_EVENT, "^S Save")
+            .add_task(Self::QUIT_KEY_EVENT, "^Q Quit");
     }
     fn set_templates(&mut self) {
         self.available_pane
@@ -278,7 +280,7 @@ impl App {
                 MouseEventKind::Up(mouse_button) => {
                     if mouse_button == MouseButton::Left {
                         // Task bar click may be translated into a key press
-                        if let Some(key_event) = self.task_bar.key_test(mouse_event.column) {
+                        if let Some(key_event) = self.task_bar.hit_test(mouse_event.column) {
                             self.handle_key_event(key_event).await;
                         }
                     }

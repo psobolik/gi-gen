@@ -2,14 +2,10 @@
  * Copyright (c) 2024 Paul Sobolik
  * Created 2024-04-14
  */
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 
 use crossterm::event::KeyEvent;
-use ratatui::layout::Rect;
-use ratatui::widgets::{Block, Padding, Paragraph};
-use ratatui::Frame;
-
-use crate::app::styles;
+use ratatui::{prelude::*, widgets::*};
 
 struct TaskAction {
     key_event: KeyEvent,
@@ -24,39 +20,72 @@ impl TaskAction {
 
 #[derive(Default)]
 pub(crate) struct TaskBar {
-    actions: Vec<TaskAction>,
+    buttons: Vec<TaskButton>,
+    style: Style,
 }
 
 impl TaskBar {
-    const SEPARATOR: &'static str = " | ";
-
-    pub(crate) fn push_task(&mut self, key_event: KeyEvent, text: &str) {
-        self.actions
-            .push(TaskAction::new(key_event, text.to_string()));
+    pub fn style(&mut self, style: Style) -> &mut Self {
+        self.style = style;
+        self
+    }
+    pub(crate) fn add_task(&mut self, key_event: KeyEvent, text: &str) -> &mut Self {
+        self.buttons
+            .push(TaskButton::new(key_event, text, self.style));
+        self
     }
     pub(crate) fn render(&mut self, area: Rect, frame: &mut Frame<'_>) {
-        let block = Block::default()
-            .padding(Padding::horizontal(1))
-            .style(styles::TASK_BAR_STYLE);
-        let paragraph = Paragraph::new(self.to_string()).block(block);
-        frame.render_widget(paragraph, area);
+        let block = Block::new().style(self.style);
+        frame.render_widget(block, area);
+
+        let mut area = Rect::new(area.x + 1, area.y, 1, 1);
+        for button in &self.buttons {
+            area.width = button.len() as u16;
+            frame.render_widget(button, area);
+            area.x += area.width + 1;
+        }
     }
-    pub(crate) fn key_test(&self, column: u16) -> Option<KeyEvent> {
+    pub(crate) fn hit_test(&self, column: u16) -> Option<KeyEvent> {
         let mut start: u16 = 1;
         let mut end: u16;
-        for action in &self.actions {
-            end = start + action.text.len() as u16;
+        for button in &self.buttons {
+            end = start + button.len() as u16;
             if column >= start && column < end {
-                return Some(action.key_event);
+                return Some(button.key_event());
             }
-            start = end + Self::SEPARATOR.len() as u16;
+            start = end + 1;
         }
         None
     }
 }
-impl Display for TaskBar {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let tasks: Vec<String> = self.actions.iter().map(|t| t.text.to_string()).collect();
-        write!(f, "{}", tasks.join(Self::SEPARATOR))
+pub struct TaskButton {
+    action: TaskAction,
+    style: Style,
+}
+
+impl TaskButton {
+    pub fn new(key_event: KeyEvent, text: &str, style: Style) -> Self {
+        Self {
+            action: TaskAction::new(key_event, text.to_string()),
+            style,
+        }
+    }
+    pub fn len(&self) -> usize {
+        self.to_string().len()
+    }
+    pub fn key_event(&self) -> KeyEvent {
+        self.action.key_event
+    }
+}
+
+impl WidgetRef for TaskButton {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+        buf.set_string(area.x, area.y, self.to_string(), self.style);
+    }
+}
+
+impl Display for TaskButton {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}]", self.action.text)
     }
 }
