@@ -15,13 +15,14 @@ use regex::Regex;
 use tokio::sync::mpsc::UnboundedSender;
 
 use panes::filter::Filter as FilterPane;
-use panes::task_bar::TaskBar as TaskBarPane;
 use panes::template_list::TemplateList as TemplateListPane;
 use popups::about as about_popup;
 use popups::error as error_popup;
 use popups::help as help_popup;
 use popups::save_option::SaveOption as SaveOptionPopup;
 use popups::save_option::SaveOptions;
+use widgets::task_action::TaskAction;
+use widgets::task_bar::TaskBar;
 
 use crate::gitignore_api;
 use crate::tui::event::Event;
@@ -31,6 +32,7 @@ mod list_state_wrapper;
 mod panes;
 mod popups;
 mod styles;
+mod widgets;
 
 #[derive(Default)]
 struct FrameSet {
@@ -62,7 +64,7 @@ pub(crate) struct App {
     filter_pane: FilterPane,
     available_pane: TemplateListPane,
     selected_pane: TemplateListPane,
-    task_bar: TaskBarPane,
+    task_bar: TaskBar,
 
     save_option_popup: SaveOptionPopup,
 
@@ -96,7 +98,8 @@ impl App {
         self.available_pane.render(self.frame_set.available, frame);
         self.selected_pane.render(self.frame_set.selected, frame);
         self.filter_pane.render(self.frame_set.filter, frame);
-        self.task_bar.render(self.frame_set.task_bar, frame);
+
+        frame.render_widget(&self.task_bar, self.frame_set.task_bar);
 
         if let Some(popup_message) = &self.popup_flag {
             match popup_message {
@@ -136,12 +139,12 @@ impl App {
         self.available_pane.set_focus(true);
         self.selected_pane.set_focus(false);
 
-        self.task_bar
-            .style(styles::TASK_BAR_STYLE)
-            .add_task(Self::HELP_KEY_EVENT, "F1 Help")
-            .add_task(Self::ABOUT_KEY_EVENT, "^A About")
-            .add_task(Self::SAVE_KEY_EVENT, "^S Save")
-            .add_task(Self::QUIT_KEY_EVENT, "^Q Quit");
+        self.task_bar.style(styles::TASK_BAR_STYLE).buttons(vec![
+            TaskAction::new(Self::HELP_KEY_EVENT, "F1 Help"),
+            TaskAction::new(Self::ABOUT_KEY_EVENT, "^A About"),
+            TaskAction::new(Self::SAVE_KEY_EVENT, "^S Save"),
+            TaskAction::new(Self::QUIT_KEY_EVENT, "^Q Quit"),
+        ]);
     }
     fn set_templates(&mut self) {
         self.available_pane

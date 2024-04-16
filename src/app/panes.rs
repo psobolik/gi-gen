@@ -4,5 +4,4 @@
  */
 
 pub(super) mod filter;
-pub(super) mod task_bar;
 pub(super) mod template_list;
