@@ -14,13 +14,13 @@ use ratatui::prelude::*;
 use regex::Regex;
 use tokio::sync::mpsc::UnboundedSender;
 
-use panes::filter::Filter as FilterPane;
 use panes::template_list::TemplateList as TemplateListPane;
 use popups::about as about_popup;
 use popups::error as error_popup;
 use popups::help as help_popup;
 use popups::save_option::SaveOption as SaveOptionPopup;
 use popups::save_option::SaveOptions;
+use widgets::filter::Filter;
 use widgets::task_action::TaskAction;
 use widgets::task_bar::TaskBar;
 
@@ -61,7 +61,7 @@ pub(crate) struct App {
 
     templates: HashMap<String, FilterStatus>,
 
-    filter_pane: FilterPane,
+    filter_pane: Filter,
     available_pane: TemplateListPane,
     selected_pane: TemplateListPane,
     task_bar: TaskBar,
@@ -97,8 +97,8 @@ impl App {
 
         self.available_pane.render(self.frame_set.available, frame);
         self.selected_pane.render(self.frame_set.selected, frame);
-        self.filter_pane.render(self.frame_set.filter, frame);
 
+        frame.render_widget(&self.filter_pane, self.frame_set.filter);
         frame.render_widget(&self.task_bar, self.frame_set.task_bar);
 
         if let Some(popup_message) = &self.popup_flag {
@@ -200,7 +200,7 @@ impl App {
                     self.apply_filter();
                 }
                 KeyCode::Backspace => {
-                    self.filter_pane.delete_last();
+                    self.filter_pane.pop();
                     self.apply_filter();
                 }
                 Self::HELP_KEY_CODE => self.set_help_popup_flag(),
@@ -221,7 +221,7 @@ impl App {
                             _ => { /* ignore other control chars */ }
                         }
                     } else {
-                        self.filter_pane.append(ch.to_ascii_lowercase());
+                        self.filter_pane.push(ch.to_ascii_lowercase());
                         self.apply_filter();
                     }
                 }

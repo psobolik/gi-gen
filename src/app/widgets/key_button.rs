@@ -24,7 +24,11 @@ pub struct KeyButton {
 impl KeyButton {
     pub fn new(action: TaskAction) -> Self {
         let style = Style::default();
-        Self { action, style, position: u16::default() }
+        Self {
+            action,
+            style,
+            position: u16::default(),
+        }
     }
     pub fn style(&mut self, style: Style) -> &mut Self {
         self.style = style;
