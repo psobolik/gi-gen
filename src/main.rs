@@ -60,6 +60,7 @@ async fn print_templates(args: FilterArgs) {
     match gitignore_api::get_template_names().await {
         Ok(mut templates) => {
             if let Some(filter) = args.filter {
+                let filter = regex::escape(filter.as_str());
                 match regex::Regex::new(filter.as_str()) {
                     Err(error) => println!("Error: [regex] {}", error),
                     Ok(re) => {
