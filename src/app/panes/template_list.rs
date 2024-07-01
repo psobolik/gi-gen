@@ -29,7 +29,7 @@ pub(crate) struct TemplateList {
 
 impl TemplateList {
     pub(crate) fn set_event_tx(&mut self, event_tx: &Option<UnboundedSender<Event>>) {
-        self.event_tx = event_tx.clone();
+        self.event_tx.clone_from(event_tx);
     }
     pub(crate) fn title(&self) -> String {
         self.title.to_string()

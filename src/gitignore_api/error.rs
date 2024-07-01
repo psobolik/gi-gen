@@ -22,3 +22,5 @@ impl From<reqwest::Error> for Error {
         Error::Reqwest(error)
     }
 }
+
+impl std::error::Error for Error {}

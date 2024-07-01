@@ -14,19 +14,13 @@ mod tui;
 mod util;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> color_eyre::eyre::Result<()> {
     let args: Args = clap::Parser::parse();
     let command = args.command.unwrap_or(Commands::Interactive);
     match command {
-        Commands::List(args) => {
-            print_templates(args).await;
-        }
-        Commands::Generate(args) => {
-            print_gitignore(args.templates).await;
-        }
-        Commands::Interactive => {
-            run_tui().await.expect("Unexpected error running TUI");
-        }
+        Commands::List(args) => print_templates(args).await,
+        Commands::Generate(args) => print_gitignore(args.templates).await,
+        Commands::Interactive => run_tui().await,
     }
 }
 
@@ -56,46 +50,39 @@ async fn run_tui() -> color_eyre::eyre::Result<()> {
     Ok(())
 }
 
-async fn print_templates(args: FilterArgs) {
-    match gitignore_api::get_template_names().await {
-        Ok(mut templates) => {
-            if let Some(filter) = args.filter {
-                let filter = regex::escape(filter.as_str());
-                match regex::Regex::new(filter.as_str()) {
-                    Err(error) => println!("Error: [regex] {}", error),
-                    Ok(re) => {
-                        templates = templates
-                            .iter()
-                            .filter(|t| re.is_match(t))
-                            .map(|t| t.to_string())
-                            .collect();
-                    }
-                }
-            }
-            if templates.is_empty() {
-                println!("No templates to show");
-            } else {
-                for template in templates {
-                    println!("{}", template);
-                }
-            }
-        }
-        Err(error) => eprintln!("Error: {}", error),
+async fn print_templates(args: FilterArgs) -> color_eyre::eyre::Result<()> {
+    let mut templates = gitignore_api::get_template_names().await?;
+    if let Some(filter) = args.filter {
+        let filter = regex::escape(filter.as_str());
+        let re = regex::Regex::new(filter.as_str())?;
+        templates = templates
+            .iter()
+            .filter(|t| re.is_match(t))
+            .map(|t| t.to_string())
+            .collect();
     }
+    if templates.is_empty() {
+        println!("No templates to show");
+    } else {
+        for template in templates {
+            println!("{}", template);
+        }
+    }
+    Ok(())
 }
 
-async fn print_gitignore(template_names: Vec<String>) {
-    let gt_result = gitignore_api::get_template(&template_names).await;
-    match gt_result {
+async fn print_gitignore(template_names: Vec<String>) -> color_eyre::eyre::Result<()> {
+    match gitignore_api::get_template(&template_names).await {
         Ok(result) => {
             println!("{}", result);
+            Ok(())
         }
         Err(error) => {
-            println!(
-                r#"Problem getting .gitignore for "{}": {}"#,
-                template_names.join(" "),
-                error
-            )
+            eprint!(
+                r#"Problem getting .gitignore for "{}": "#,
+                template_names.join(" ")
+            );
+            Err(color_eyre::eyre::Report::new(error))
         }
-    };
+    }
 }
