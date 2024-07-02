@@ -10,6 +10,7 @@ use std::path::Path;
 
 use crossterm::event::KeyCode::Char;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::Position;
 use ratatui::prelude::*;
 use regex::Regex;
 use tokio::sync::mpsc::UnboundedSender;
@@ -26,7 +27,6 @@ use widgets::task_bar::TaskBar;
 
 use crate::gitignore_api;
 use crate::tui::event::Event;
-use crate::util;
 
 mod list_state_wrapper;
 mod panes;
@@ -42,7 +42,7 @@ struct FrameSet {
     filter: Rect,
 }
 
-#[derive(Default)]
+#[derive(Copy, Clone, Default)]
 struct FilterStatus {
     hidden: bool,
     selected: bool,
@@ -134,7 +134,7 @@ impl App {
                 }
                 self.set_templates();
             }
-            Err(error) => eprintln!("Error: {}", error),
+            Err(error) => self.set_error_popup_flag(error.to_string().as_str()),
         }
         self.available_pane.set_focus(true);
         self.selected_pane.set_focus(false);
@@ -154,15 +154,25 @@ impl App {
     fn available_templates(&self) -> Vec<String> {
         self.templates
             .iter()
-            .filter(|(_template, status)| !status.hidden && !status.selected)
-            .map(|(template, _status)| template.to_string())
+            .filter_map(|(template, status)| {
+                if !status.hidden && !status.selected {
+                    Some(template.to_string())
+                } else {
+                    None
+                }
+            })
             .collect()
     }
     fn selected_templates(&self) -> Vec<String> {
         self.templates
             .iter()
-            .filter(|(_template, status)| status.selected)
-            .map(|(template, _status)| template.to_string())
+            .filter_map(|(template, status)| {
+                if status.selected {
+                    Some(template.to_string())
+                } else {
+                    None
+                }
+            })
             .collect()
     }
     async fn handle_key_event(&mut self, key_event: KeyEvent) {
@@ -278,7 +288,11 @@ impl App {
         }
     }
     async fn pane_handle_mouse_event(&mut self, mouse_event: MouseEvent) {
-        if util::is_in_rect(mouse_event.column, mouse_event.row, self.frame_set.task_bar) {
+        if self
+            .frame_set
+            .task_bar
+            .contains(Position::new(mouse_event.column, mouse_event.row))
+        {
             match mouse_event.kind {
                 MouseEventKind::Up(mouse_button) => {
                     if mouse_button == MouseButton::Left {
@@ -421,7 +435,7 @@ impl App {
         self.set_templates();
     }
     fn apply_filter(&mut self) {
-        // We escape the filter wo we can use the input as a regular expression, and we also ignore
+        // We escape the filter so we can use the input as a regular expression, and we also ignore
         // any filter that can't be used as a regular expression. (Belt and suspenders!) This is
         // really only relevant for "c++".
         let filter = regex::escape(self.filter_pane.text());

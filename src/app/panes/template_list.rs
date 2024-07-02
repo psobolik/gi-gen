@@ -5,7 +5,7 @@
 
 use crossterm::event::KeyCode::Char;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-use ratatui::layout::Rect;
+use ratatui::layout::{Position, Rect};
 use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, Padding};
 use ratatui::Frame;
 use tokio::sync::mpsc::UnboundedSender;
@@ -13,7 +13,6 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::app::list_state_wrapper::ListStateWrapper;
 use crate::app::styles;
 use crate::tui::event::Event;
-use crate::util;
 
 #[derive(Default)]
 pub(crate) struct TemplateList {
@@ -45,7 +44,7 @@ impl TemplateList {
         self.has_focus = focus;
     }
     pub(crate) fn hit_test(&self, x: u16, y: u16) -> bool {
-        util::is_in_rect(x, y, self.area)
+        self.area.contains(Position::new(x, y))
     }
     pub(crate) fn set_templates(&mut self, templates: Vec<String>) -> &mut Self {
         self.templates = templates;

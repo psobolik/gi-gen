@@ -43,8 +43,7 @@ impl TaskBar {
     pub fn buttons(&mut self, actions: Vec<TaskAction>) -> &mut Self {
         let mut position = self.button_space;
         for action in actions {
-            let mut key_button = KeyButton::new(action);
-            key_button.style(self.button_style).position(position);
+            let key_button = KeyButton::new(action, self.button_style, position);
             position += self.button_space + key_button.len() as u16;
             self.buttons.push(key_button);
         }

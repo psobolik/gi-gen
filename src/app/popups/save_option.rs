@@ -3,7 +3,7 @@
  * Created 2024-04-14
  */
 
-use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
+use ratatui::layout::{Constraint, Direction, Layout, Margin, Position, Rect};
 use ratatui::style::{Style, Stylize};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
@@ -49,11 +49,14 @@ impl SaveOption {
         }
     }
     pub(crate) fn hit_test(&self, column: u16, row: u16) -> Option<SaveOptions> {
-        if util::is_in_rect(column, row, self.frame_set.replace) {
+        let position = Position::new(column, row);
+        if self.frame_set.replace.contains(position) {
             Some(SaveOptions::Replace)
-        } else if util::is_in_rect(column, row, self.frame_set.append) {
+        } else if self.frame_set.append.contains(position) {
             Some(SaveOptions::Append)
-        } else if util::is_in_rect(column, row, self.frame_set.cancel) {
+        } else if self.frame_set.cancel.contains(position)
+            || !self.frame_set.popup.contains(position)
+        {
             Some(SaveOptions::Cancel)
         } else {
             None

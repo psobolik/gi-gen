@@ -3,9 +3,10 @@
  * Created 2024-04-11
  */
 
-use crate::app::App;
 use args::{Args, Commands, FilterArgs};
 use tui::event::Event;
+
+use crate::app::App;
 
 mod app;
 mod args;
@@ -25,11 +26,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
 }
 
 async fn run_tui() -> color_eyre::eyre::Result<()> {
-    let mut tui = tui::Tui::new()
-        .unwrap()
-        .tick_rate(1.0)
-        .frame_rate(30.0)
-        .mouse(true);
+    let mut tui = tui::Tui::new().unwrap().mouse(true);
     tui.enter()?;
     let mut app = App::default();
     app.set_event_tx(Some(tui.event_tx.clone()));
@@ -57,16 +54,20 @@ async fn print_templates(args: FilterArgs) -> color_eyre::eyre::Result<()> {
         let re = regex::Regex::new(filter.as_str())?;
         templates = templates
             .iter()
-            .filter(|t| re.is_match(t))
-            .map(|t| t.to_string())
+            .filter_map(|t| {
+                if re.is_match(t) {
+                    Some(t.to_string())
+                } else {
+                    None
+                }
+            })
             .collect();
-    }
-    if templates.is_empty() {
-        println!("No templates to show");
-    } else {
-        for template in templates {
-            println!("{}", template);
+        if templates.is_empty() {
+            println!(r#"No templates match "{}""#, filter);
         }
+    }
+    for template in templates {
+        println!("{}", template);
     }
     Ok(())
 }

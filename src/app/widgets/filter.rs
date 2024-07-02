@@ -30,15 +30,11 @@ impl Filter {
         self.set_text(String::default().as_str());
     }
     pub fn push(&mut self, ch: char) -> &str {
-        let text = self.text.to_owned() + &ch.to_string();
-        self.text = text;
+        self.text.push(ch);
         self.text()
     }
     pub fn pop(&mut self) -> &str {
-        let len = self.text.len();
-        if len > 0 {
-            self.text.remove(len - 1);
-        }
+        self.text.pop();
         self.text()
     }
 }

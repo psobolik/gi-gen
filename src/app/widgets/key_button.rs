@@ -22,21 +22,12 @@ pub struct KeyButton {
     position: u16,
 }
 impl KeyButton {
-    pub fn new(action: TaskAction) -> Self {
-        let style = Style::default();
+    pub fn new(action: TaskAction, style: Style, position: u16) -> Self {
         Self {
             action,
             style,
-            position: u16::default(),
+            position,
         }
-    }
-    pub fn style(&mut self, style: Style) -> &mut Self {
-        self.style = style;
-        self
-    }
-    pub fn position(&mut self, position: u16) -> &mut Self {
-        self.position = position;
-        self
     }
     pub fn len(&self) -> usize {
         self.to_string().len()
