@@ -9,10 +9,7 @@ use crossterm::event::{KeyEvent, MouseEvent};
 pub enum Event {
     Init,
     TemplateSelect(String),
-    // Quit,
     Error,
-    // Closed,
-    Tick,
     Render,
     FocusGained,
     FocusLost,

@@ -20,7 +20,7 @@ pub(crate) fn render(frame: &mut Frame) {
         ]),
         Line::from("+-------------+".light_blue()),
         Line::from(vec![Span::raw("v"), Span::raw(env!("CARGO_PKG_VERSION"))]),
-        Line::from("Copyright © 2024 Paul Sobolik"),
+        Line::from("Copyright © 2024, 26 Paul Sobolik"),
         Line::default(),
         Line::from("API and templates provided by".italic()),
         Line::from("https://www.toptal.com/developers/gitignore/".italic()),

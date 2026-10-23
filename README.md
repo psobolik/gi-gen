@@ -1,4 +1,4 @@
-# gi-gen (.gitignore generator)
+# gi-gen
 A command line program to generate a .gitingore file.
 - Uses the Toptal [gitignore.io][toptal] API. 
 - Written in [Rust][rust], using the [Ratatui][ratatui] terminal user interface library.

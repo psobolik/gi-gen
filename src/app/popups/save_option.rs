@@ -87,7 +87,7 @@ impl SaveOption {
         frame.render_widget(append_prompt, self.frame_set.append);
         frame.render_widget(cancel_prompt, self.frame_set.cancel);
     }
-    fn format_prompt(prompt: &str) -> Paragraph {
+    fn format_prompt(prompt: &str) -> Paragraph<'_> {
         let prompt = prompt.as_bytes();
         let first = std::str::from_utf8(&prompt[0..1]).expect("Bad input");
         let rest = std::str::from_utf8(&prompt[1..]).expect("Bad input");

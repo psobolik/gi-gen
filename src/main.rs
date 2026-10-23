@@ -26,10 +26,9 @@ async fn main() -> color_eyre::eyre::Result<()> {
 }
 
 async fn run_tui() -> color_eyre::eyre::Result<()> {
-    let mut tui = tui::Tui::new().unwrap().mouse(true);
+    let mut tui = tui::Tui::new()?.mouse(true);
     tui.enter()?;
-    let mut app = App::default();
-    app.set_event_tx(Some(tui.event_tx.clone()));
+    let mut app = App::default().with_event_tx(Some(tui.event_tx.clone()));
 
     loop {
         let event = tui.next().await?; // blocks until next event

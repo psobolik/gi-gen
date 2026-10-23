@@ -15,7 +15,7 @@ use ratatui::prelude::*;
 use regex::Regex;
 use tokio::sync::mpsc::UnboundedSender;
 
-use panes::template_list::TemplateList as TemplateListPane;
+use panes::template_list_pane::TemplateListPane;
 use popups::about as about_popup;
 use popups::error as error_popup;
 use popups::help as help_popup;
@@ -48,6 +48,7 @@ struct FilterStatus {
     selected: bool,
 }
 
+#[derive(Clone, Debug)]
 enum PopupFlag {
     Error(String),
     Help,
@@ -68,13 +69,12 @@ pub(crate) struct App {
 
     save_option_popup: SaveOptionPopup,
 
-    save_option_flag: Option<bool>,
     popup_flag: Option<PopupFlag>,
     frame_set: FrameSet,
 }
 
 impl App {
-    pub(crate) fn set_event_tx(&mut self, event_tx: Option<UnboundedSender<Event>>) -> &mut Self {
+    pub(crate) fn with_event_tx(mut self, event_tx: Option<UnboundedSender<Event>>) -> Self {
         self.available_pane.set_event_tx(&event_tx);
         self.selected_pane.set_event_tx(&event_tx);
         self
@@ -101,8 +101,8 @@ impl App {
         frame.render_widget(&self.filter_pane, self.frame_set.filter);
         frame.render_widget(&self.task_bar, self.frame_set.task_bar);
 
-        if let Some(popup_message) = &self.popup_flag {
-            match popup_message {
+        if let Some(popup_flag) = &self.popup_flag {
+            match popup_flag {
                 PopupFlag::Error(message) => error_popup::render(message, frame),
                 PopupFlag::Help => help_popup::render(frame),
                 PopupFlag::About => about_popup::render(frame),
@@ -125,8 +125,6 @@ impl App {
     const QUIT_KEY_EVENT: KeyEvent = KeyEvent::new(Char(Self::QUIT_CHAR), KeyModifiers::CONTROL);
 
     async fn handle_init_event(&mut self) {
-        self.available_pane.set_title("Available Templates");
-        self.selected_pane.set_title("Selected Templates");
         match gitignore_api::get_template_names().await {
             Ok(templates) => {
                 for template in templates {
@@ -136,8 +134,12 @@ impl App {
             }
             Err(error) => self.set_error_popup_flag(error.to_string().as_str()),
         }
-        self.available_pane.set_focus(true);
-        self.selected_pane.set_focus(false);
+        self.available_pane
+            .set_title("Available Templates")
+            .set_focus(true);
+        self.selected_pane
+            .set_title("Selected Templates")
+            .set_focus(false);
 
         self.task_bar.style(styles::TASK_BAR_STYLE).buttons(vec![
             TaskAction::new(Self::HELP_KEY_EVENT, "F1 Help"),
@@ -175,141 +177,6 @@ impl App {
             })
             .collect()
     }
-    async fn handle_key_event(&mut self, key_event: KeyEvent) {
-        // Ctrl+C closes the app, regardless of its state
-        if Char('c') == key_event.code && key_event.modifiers == KeyModifiers::CONTROL {
-            self.quit();
-            return;
-        }
-        // If the save options popup is showing, it handles all keys
-        if let Some(PopupFlag::SaveOption) = self.popup_flag {
-            match key_event.code {
-                KeyCode::Esc => self.cancel_save(),
-                Char(ch) => {
-                    match self.save_option_popup.key_test(ch) {
-                        None => { /* ignore unrecognized keys */ }
-                        Some(save_option) => self.handle_save_option(save_option).await,
-                    }
-                }
-                _ => { /* ignore other keys */ }
-            }
-        } else if !self.maybe_clear_message() {
-            // If there's another popup, any key event will clear it and stop processing the event
-            match key_event.code {
-                KeyCode::Tab => self.toggle_focus(),
-                KeyCode::Enter
-                | KeyCode::Home
-                | KeyCode::PageUp
-                | KeyCode::Up
-                | KeyCode::End
-                | KeyCode::PageDown
-                | KeyCode::Down
-                | Char(' ') => self.pane_handle_key_event(key_event),
-                KeyCode::Esc | KeyCode::Delete => {
-                    self.filter_pane.clear();
-                    self.apply_filter();
-                }
-                KeyCode::Backspace => {
-                    self.filter_pane.pop();
-                    self.apply_filter();
-                }
-                Self::HELP_KEY_CODE => self.set_help_popup_flag(),
-                Char(ch) => {
-                    if key_event.modifiers == KeyModifiers::CONTROL {
-                        match ch {
-                            Self::QUIT_CHAR => self.quit(),
-                            Self::ABOUT_CHAR => self.set_about_popup_flag(),
-                            Self::SAVE_CHAR => self.save().await,
-                            Self::PREV_CHAR => self.pane_handle_key_event(KeyEvent::new(
-                                KeyCode::Up,
-                                KeyModifiers::NONE,
-                            )),
-                            Self::NEXT_CHAR => self.pane_handle_key_event(KeyEvent::new(
-                                KeyCode::Down,
-                                KeyModifiers::NONE,
-                            )),
-                            _ => { /* ignore other control chars */ }
-                        }
-                    } else {
-                        self.filter_pane.push(ch.to_ascii_lowercase());
-                        self.apply_filter();
-                    }
-                }
-                _ => { /* ignore other keys */ }
-            }
-        }
-    }
-    fn pane_handle_key_event(&mut self, key_event: KeyEvent) {
-        if self.available_pane.has_focus() {
-            self.available_pane.handle_key_event(key_event);
-        } else {
-            self.selected_pane.handle_key_event(key_event);
-        }
-    }
-    async fn handle_mouse_event(&mut self, mouse_event: MouseEvent) {
-        // If the save option popup is active, it handles all mouse events
-        if let Some(PopupFlag::SaveOption) = self.popup_flag {
-            match mouse_event.kind {
-                MouseEventKind::Up(mouse_button) => {
-                    if mouse_button == MouseButton::Left {
-                        match self
-                            .save_option_popup
-                            .hit_test(mouse_event.column, mouse_event.row)
-                        {
-                            None => { /* ignore random clicks */ }
-                            Some(save_option) => self.handle_save_option(save_option).await,
-                        }
-                    }
-                }
-                _ => { /* ignore other events */ }
-            }
-        } else {
-            match mouse_event.kind {
-                MouseEventKind::Up(mouse_button) => {
-                    if mouse_button == MouseButton::Left && !self.maybe_clear_message() {
-                        // If there's another popup, a mouse up event might close it and stop processing the event.
-                        if self
-                            .available_pane
-                            .hit_test(mouse_event.column, mouse_event.row)
-                            && !self.available_pane.has_focus()
-                            || self
-                                .selected_pane
-                                .hit_test(mouse_event.column, mouse_event.row)
-                                && !self.selected_pane.has_focus()
-                        {
-                            self.toggle_focus();
-                        } else {
-                            self.pane_handle_mouse_event(mouse_event).await;
-                        }
-                    }
-                }
-                _ => self.pane_handle_mouse_event(mouse_event).await,
-            }
-        }
-    }
-    async fn pane_handle_mouse_event(&mut self, mouse_event: MouseEvent) {
-        if self
-            .frame_set
-            .task_bar
-            .contains(Position::new(mouse_event.column, mouse_event.row))
-        {
-            match mouse_event.kind {
-                MouseEventKind::Up(mouse_button) => {
-                    if mouse_button == MouseButton::Left {
-                        // Task bar click may be translated into a key press
-                        if let Some(key_event) = self.task_bar.hit_test(mouse_event.column) {
-                            self.handle_key_event(key_event).await;
-                        }
-                    }
-                }
-                _ => { /* ignore other events */ }
-            }
-        } else if self.available_pane.has_focus() {
-            self.available_pane.handle_mouse_event(mouse_event);
-        } else if self.selected_pane.has_focus() {
-            self.selected_pane.handle_mouse_event(mouse_event);
-        }
-    }
     fn handle_resize_event(&mut self, width: u16, height: u16) {
         self.frame_set = Self::calculate_frames(Rect::new(0, 0, width, height));
         self.available_pane
@@ -322,28 +189,17 @@ impl App {
     }
     async fn handle_save_option(&mut self, save_option: SaveOptions) {
         match save_option {
-            SaveOptions::Replace => self.overwrite_save().await,
-            SaveOptions::Append => self.append_save().await,
-            SaveOptions::Cancel => self.cancel_save(),
+            SaveOptions::Replace => {
+                self.save(Some(true)).await;
+            }
+            SaveOptions::Append => {
+                self.save(Some(false)).await;
+            }
+            SaveOptions::Cancel => {}
         }
-    }
-    async fn overwrite_save(&mut self) {
-        // Cancel the save option popup and call save again, this time with the overwrite flag set
-        self.save_option_flag = Some(true);
-        self.popup_flag = None;
-        self.save().await;
-    }
-    async fn append_save(&mut self) {
-        // Cancel the save option popup and call save again, this time with the overwrite flag clear
-        self.save_option_flag = Some(false);
-        self.popup_flag = None;
-        self.save().await;
-    }
-    fn cancel_save(&mut self) {
-        // Just cancel the save option popup
         self.popup_flag = None;
     }
-    async fn save(&mut self) {
+    async fn save(&mut self, overwrite_option_flag: Option<bool>) {
         let selected_templates = self.selected_templates();
         if selected_templates.is_empty() {
             self.set_error_popup_flag("Select one or more templates and try again.");
@@ -354,14 +210,12 @@ impl App {
                     let mut open_options = OpenOptions::new();
                     let message: &str;
                     if output_file.exists() {
-                        match self.save_option_flag {
+                        match overwrite_option_flag {
                             Some(overwrite_flag) => {
                                 if overwrite_flag {
-                                    self.save_option_flag = None;
                                     open_options.truncate(true).write(true);
                                     message = "Replaced contents of existing .gitignore file.";
                                 } else {
-                                    self.save_option_flag = None;
                                     open_options.append(true);
                                     message = "Appended templates to existing .gitignore file.";
                                 }
@@ -412,28 +266,14 @@ impl App {
     fn set_save_option_popup_flag(&mut self) {
         self.popup_flag = Some(PopupFlag::SaveOption);
     }
-    // Clears the error, help or about popup if they are showing, and returns
-    // true to indicate that the event was handled. Does nothing if the
-    // save option popup is showing or if no popup is showing, returning false
-    // to indicate that the event was not handled.
-    fn maybe_clear_message(&mut self) -> bool {
-        if let Some(popup_flag) = &self.popup_flag {
-            return match popup_flag {
-                PopupFlag::Error(_) | PopupFlag::Help | PopupFlag::About => {
-                    self.popup_flag = None;
-                    true
-                }
-                PopupFlag::SaveOption => false,
-            };
-        }
-        false
-    }
     // Finds a template by name and toggles its selected flag.
     fn toggle_selection(&mut self, template: String) {
-        let filter_status = self.templates.entry(template).or_default();
-        filter_status.selected = !filter_status.selected;
+        self.templates
+            .entry(template)
+            .and_modify(|status| status.selected = !status.selected);
         self.set_templates();
     }
+    /// Hide templates that don't match the filter by setting their hidden status flag;
     fn apply_filter(&mut self) {
         // We escape the filter so we can use the input as a regular expression, and we also ignore
         // any filter that can't be used as a regular expression. (Belt and suspenders!) This is
@@ -442,8 +282,11 @@ impl App {
         if let Ok(regex) = Regex::new(filter.as_str()) {
             let templates: Vec<String> = self.templates.keys().map(|t| t.to_string()).collect();
             for template in templates {
-                let filter_status = self.templates.entry(template.to_string()).or_default();
-                filter_status.hidden = !regex.is_match(template.as_str());
+                self.templates
+                    .entry(template.to_string())
+                    .and_modify(|status| {
+                        status.hidden = !regex.is_match(template.as_str());
+                    });
             }
             self.set_templates();
         }
@@ -495,5 +338,190 @@ impl App {
             selected: right,
             task_bar: bottom,
         }
+    }
+}
+impl App {
+    async fn handle_key_event(&mut self, key_event: KeyEvent) {
+        // Ctrl+C closes the app, regardless of its state
+        if Char('c') == key_event.code && key_event.modifiers == KeyModifiers::CONTROL {
+            self.quit();
+            return;
+        }
+        // Give a popup the chance to handle the event
+        if self.popup_handle_key_event(key_event).await {
+            return;
+        }
+        // Give the active pane the chance to handle the event
+        if self.pane_handle_key_event(key_event) {
+            return;
+        }
+        // If nobody else handled it, give the app a shot at the event
+        match key_event.code {
+            KeyCode::Tab => self.toggle_focus(),
+            KeyCode::Esc | KeyCode::Delete => {
+                self.filter_pane.clear();
+                self.apply_filter();
+            }
+            KeyCode::Backspace => {
+                self.filter_pane.pop();
+                self.apply_filter();
+            }
+            Self::HELP_KEY_CODE => self.set_help_popup_flag(),
+            Char(ch) => {
+                if key_event.modifiers == KeyModifiers::CONTROL {
+                    match ch {
+                        Self::QUIT_CHAR => self.quit(),
+                        Self::ABOUT_CHAR => self.set_about_popup_flag(),
+                        Self::SAVE_CHAR => self.save(None).await,
+                        _ => { /* ignore other control chars */ }
+                    }
+                } else {
+                    self.filter_pane.push(ch.to_ascii_lowercase());
+                    self.apply_filter();
+                }
+            }
+            _ => { /* ignore other keys */ }
+        }
+    }
+    fn pane_handle_key_event(&mut self, key_event: KeyEvent) -> bool {
+        if self.available_pane.has_focus() {
+            self.available_pane.handle_key_event(key_event)
+        } else {
+            self.selected_pane.handle_key_event(key_event)
+        }
+    }
+    // If a popup is open, close it and return true else return false.
+    async fn popup_handle_key_event(&mut self, key_event: KeyEvent) -> bool {
+        // No popup, return false
+        let Some(popup_flag) = &self.popup_flag else {
+            return false;
+        };
+        match popup_flag {
+            PopupFlag::Error(_) | PopupFlag::Help | PopupFlag::About => {
+                self.popup_flag = None;
+            }
+            PopupFlag::SaveOption => {
+                if self.save_handle_key_event(key_event).await {
+                    self.popup_flag = None;
+                }
+            }
+        }
+        true // If a popup was open, eat the key
+    }
+    async fn save_handle_key_event(&mut self, key_event: KeyEvent) -> bool {
+        match key_event.code {
+            KeyCode::Esc => {
+                self.popup_flag = None;
+                true
+            }
+            Char(ch) => {
+                if let Some(save_option) = self.save_option_popup.key_test(ch) {
+                    self.handle_save_option(save_option).await;
+                    true
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
+}
+impl App {
+    async fn handle_mouse_event(&mut self, mouse_event: MouseEvent) {
+        // Allow a popup to handle the event
+        if self.popup_handle_mouse_event(mouse_event).await {
+            return;
+        }
+        // Allow the task bar to handle the event
+        if self.task_bar_handle_mouse_event(mouse_event).await {
+            return;
+        }
+        // If the mouse event occurs in the focused pane, the pane will have a chance to handle it.
+        // Otherwise if the mouse is clicked in the unfocused pane, it will be given the focus.
+        let mouse_over_available_pane = self
+            .available_pane
+            .hit_test(mouse_event.column, mouse_event.row);
+        let mouse_over_selected_pane = self
+            .selected_pane
+            .hit_test(mouse_event.column, mouse_event.row);
+        if self.available_pane.has_focus() {
+            if mouse_over_available_pane {
+                // The mouse is in the pane
+                self.available_pane.handle_mouse_event(mouse_event);
+            } else {
+                // If the event is a left click in the selected pane, toggle the focus
+                if mouse_over_selected_pane
+                    && mouse_event.kind == MouseEventKind::Up(MouseButton::Left)
+                {
+                    self.toggle_focus();
+                }
+            }
+        } else if self.selected_pane.has_focus() {
+            if mouse_over_selected_pane {
+                // The mouse is over in the pane
+                self.selected_pane.handle_mouse_event(mouse_event);
+            } else {
+                // If the event is a left click outside the selected pane, toggle the focus
+                if mouse_over_available_pane
+                    && mouse_event.kind == MouseEventKind::Up(MouseButton::Left)
+                {
+                    self.toggle_focus();
+                }
+            }
+        }
+    }
+    async fn task_bar_handle_mouse_event(&mut self, mouse_event: MouseEvent) -> bool {
+        // Only handle left mouse up events
+        if mouse_event.kind != MouseEventKind::Up(MouseButton::Left) {
+            return false;
+        }
+        // Ignore events that are not on the taskbar
+        if !self
+            .frame_set
+            .task_bar
+            .contains(Position::new(mouse_event.column, mouse_event.row))
+        {
+            return false;
+        }
+        // Task bar click may be translated into a key press
+        if let Some(key_event) = self.task_bar.hit_test(mouse_event.column) {
+            self.handle_key_event(key_event).await;
+            true
+        } else {
+            false
+        }
+    }
+    // If a popup is open, close it and return true else return false.
+    async fn popup_handle_mouse_event(&mut self, mouse_event: MouseEvent) -> bool {
+        // Only handle left mouse up events
+        if mouse_event.kind != MouseEventKind::Up(MouseButton::Left) {
+            return false;
+        }
+        // No popup, return false
+        let Some(popup_flag) = &self.popup_flag else {
+            return false;
+        };
+        match popup_flag {
+            PopupFlag::Error(_) | PopupFlag::Help | PopupFlag::About => {
+                self.popup_flag = None;
+                true
+            }
+            PopupFlag::SaveOption => self.save_popup_handle_mouse_event(mouse_event).await,
+        }
+    }
+    // If the save option popup is open it may handle the mouse event.
+    // The function will return true if it does.
+    async fn save_popup_handle_mouse_event(&mut self, mouse_event: MouseEvent) -> bool {
+        let Some(PopupFlag::SaveOption) = &self.popup_flag else {
+            return false;
+        };
+        let Some(save_option) = self
+            .save_option_popup
+            .hit_test(mouse_event.column, mouse_event.row)
+        else {
+            return false;
+        };
+        self.handle_save_option(save_option).await;
+        true
     }
 }

@@ -3,4 +3,4 @@
  * Created 2024-04-14
  */
 
-pub(super) mod template_list;
+pub(super) mod template_list_pane;

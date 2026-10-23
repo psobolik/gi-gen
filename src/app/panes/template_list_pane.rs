@@ -11,11 +11,11 @@ use ratatui::Frame;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::app::list_state_wrapper::ListStateWrapper;
-use crate::app::styles;
+use crate::app::{styles, App};
 use crate::tui::event::Event;
 
 #[derive(Default)]
-pub(crate) struct TemplateList {
+pub(crate) struct TemplateListPane {
     has_focus: bool,
     area: Rect,
     title: String,
@@ -26,7 +26,7 @@ pub(crate) struct TemplateList {
     list_state: ListStateWrapper,
 }
 
-impl TemplateList {
+impl TemplateListPane {
     pub(crate) fn set_event_tx(&mut self, event_tx: &Option<UnboundedSender<Event>>) {
         self.event_tx.clone_from(event_tx);
     }
@@ -78,26 +78,29 @@ impl TemplateList {
             None
         }
     }
-    pub(crate) fn handle_key_event(&mut self, key_event: KeyEvent) {
-        match key_event.code {
+    pub(crate) fn handle_key_event(&mut self, key_event: KeyEvent) -> bool {
+        // Convert some control keys to their corresponding key codes
+        let key_code = if key_event.modifiers == KeyModifiers::CONTROL {
+            match key_event.code {
+                Char(App::PREV_CHAR) => KeyCode::Up,
+                Char(App::NEXT_CHAR) => KeyCode::Down,
+                _ => key_event.code,
+            }
+        } else {
+            key_event.code
+        };
+        match key_code {
             KeyCode::Enter => self.send_template_select_event(),
-
             KeyCode::Home => self.list_state.select_first(),
             KeyCode::PageUp => self.list_state.recede_selected(self.page_size()),
             KeyCode::Up => self.list_state.recede_selected(1),
-
             KeyCode::End => self.list_state.select_last(),
             KeyCode::PageDown => self.list_state.advance_selected(self.page_size()),
             KeyCode::Down => self.list_state.advance_selected(1),
-
-            key_code => {
-                if let Char(ch) = key_code {
-                    if ch == ' ' {
-                        self.send_template_select_event();
-                    }
-                }
-            }
+            Char(' ') => self.send_template_select_event(),
+            _ => return false,
         }
+        true
     }
     pub(crate) fn handle_mouse_event(&mut self, mouse_event: MouseEvent) {
         match mouse_event.kind {
@@ -137,7 +140,7 @@ impl TemplateList {
         frame.render_stateful_widget(list, area, &mut self.list_state.list_state)
     }
 }
-impl TemplateList {
+impl TemplateListPane {
     fn send_template_select_event(&self) {
         if let Some(selected) = self.list_state.selected() {
             // Signal that the template was selected
@@ -175,7 +178,7 @@ impl TemplateList {
         .title(self.title())
     }
 }
-impl TemplateList {
+impl TemplateListPane {
     fn focused_block<'a>() -> Block<'a> {
         Block::default()
             .borders(Borders::ALL)
